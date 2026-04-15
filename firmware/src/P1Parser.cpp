@@ -77,6 +77,57 @@ bool P1Parser::parse(const String& telegram, P1Data& out) {
         }
     }
 
+    // ── Stroomstoringen ───────────────────────────────────────────────────────
+    // Tellers (worden nooit gereset door de meter)
+    out.failures_short = (uint16_t)extractFloat(telegram, "0-0:96.7.21", "");
+    out.failures_long  = (uint16_t)extractFloat(telegram, "0-0:96.7.9",  "");
+
+    // Gedetailleerde log: 1-0:99.97.0(N)(0-0:96.7.19)(ts1W)(dur1*s)...
+    // Formaat: N entries, elk met tijdstempel + duur in seconden
+    out.failure_log.clear();
+    {
+        int idx = telegram.indexOf("1-0:99.97.0(");
+        if (idx >= 0) {
+            // Lees het aantal entries N
+            int nOpen  = telegram.indexOf('(', idx);
+            int nClose = telegram.indexOf(')', nOpen);
+            int n = telegram.substring(nOpen + 1, nClose).toInt();
+
+            // Sla de vaste "(0-0:96.7.19)" header over
+            int pos = telegram.indexOf("(0-0:96.7.19)", nClose);
+            if (pos >= 0) pos += 13; // len("(0-0:96.7.19)")
+
+            for (int i = 0; i < n && pos > 0; i++) {
+                // Tijdstempel: (YYMMDDHHmmSSW/S)
+                int tsOpen  = telegram.indexOf('(', pos);
+                int tsClose = telegram.indexOf(')', tsOpen);
+                if (tsOpen < 0 || tsClose < 0) break;
+
+                String tsRaw = telegram.substring(tsOpen + 1, tsClose);
+                P1Data::FailureEntry entry;
+                memset(&entry, 0, sizeof(entry));
+
+                if (tsRaw.length() >= 13) {
+                    char dst = tsRaw[12];
+                    dsmrToUtc(tsRaw.c_str(), dst, entry.timestamp, sizeof(entry.timestamp));
+                }
+
+                // Duur: (NNNNN*s)
+                int durOpen  = telegram.indexOf('(', tsClose);
+                int durClose = telegram.indexOf(')', durOpen);
+                if (durOpen < 0 || durClose < 0) break;
+
+                String durStr = telegram.substring(durOpen + 1, durClose);
+                int star = durStr.indexOf('*');
+                if (star >= 0) durStr = durStr.substring(0, star);
+                entry.duration_s = (uint32_t)durStr.toInt();
+
+                out.failure_log.push_back(entry);
+                pos = durClose + 1;
+            }
+        }
+    }
+
     // ── Tijdstempel (OBIS 0-0:1.0.0) ─────────────────────────────────────────
     {
         int tsIdx = telegram.indexOf("0-0:1.0.0(");

@@ -2,6 +2,7 @@
 #include "P1Parser.h"
 #include "WiFiManager.h"
 #include "CaptivePortal.h"
+#include "PowerFailureLog.h"
 
 // ─── Pin configuratie ──────────────────────────────────────────────────────────
 #define P1_RX_PIN    4
@@ -9,10 +10,11 @@
 #define P1_BAUDRATE  115200
 
 // ─── Globale objecten ──────────────────────────────────────────────────────────
-HardwareSerial P1Serial(1);
-P1Parser       parser;
-WiFiManager    wifiManager;
-CaptivePortal  portal;
+HardwareSerial  P1Serial(1);
+P1Parser        parser;
+WiFiManager     wifiManager;
+CaptivePortal   portal;
+PowerFailureLog failureLog;
 
 // ─── Telegram lezen ───────────────────────────────────────────────────────────
 
@@ -71,6 +73,8 @@ void setup() {
     pinMode(P1_RTS_PIN, OUTPUT);
     digitalWrite(P1_RTS_PIN, HIGH);
 
+    failureLog.begin();   // LittleFS + storingenlog laden
+
     if (!wifiManager.begin()) {
         startPortal();
     }
@@ -102,6 +106,22 @@ void loop() {
         return;
     }
 
+    // Stroomstoringen verwerken — direct naar flash als er nieuwe zijn
+    if (!data.failure_log.empty()) {
+        std::vector<PowerFailure> parsed;
+        for (const auto& e : data.failure_log) {
+            PowerFailure pf;
+            strncpy(pf.timestamp,  e.timestamp, sizeof(pf.timestamp));
+            pf.duration_s = e.duration_s;
+            memset(pf.detected_at, 0, sizeof(pf.detected_at));
+            parsed.push_back(pf);
+        }
+        int nieuw = failureLog.update(parsed, data.timestamp);
+        if (nieuw > 0) {
+            Serial.printf("[Main] %d nieuwe storing(en) opgeslagen in flash\n", nieuw);
+        }
+    }
+
     Serial.println("─────────────────────────────────────────");
     Serial.printf("[P1] %s%s\n",
                   data.timestamp, data.crc_valid ? "" : "  ⚠ CRC-fout");
@@ -115,4 +135,9 @@ void loop() {
                   data.voltage_l1, data.voltage_l2, data.voltage_l3);
     Serial.printf("     Gas:            %.3f m³  (%s)\n",
                   data.gas_total, data.gas_timestamp);
+    if (data.failures_short > 0 || data.failures_long > 0) {
+        Serial.printf("     Storingen kort/lang: %d / %d  (log: %d entries)\n",
+                      data.failures_short, data.failures_long,
+                      (int)data.failure_log.size());
+    }
 }

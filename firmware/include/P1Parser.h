@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <vector>
 
 // ─── Data structuur ────────────────────────────────────────────────────────────
 // Bevat alle waarden die uit één P1-telegram worden gelezen.
@@ -40,6 +41,16 @@ struct P1Data {
     // Gas
     float gas_total;         // 0-n:24.2.1  Gasmeter teller (m³)
     char  gas_timestamp[20]; // Tijdstempel gasmeting (UTC)
+
+    // Stroomstoringen (uit meter-log, OBIS 1-0:99.97.0)
+    uint16_t failures_short;    // 0-0:96.7.21 — totaal korte storingen (teller)
+    uint16_t failures_long;     // 0-0:96.7.9  — totaal lange storingen (teller)
+    // Gedetailleerde log (max 10 entries per telegram, DSMR 5.0 spec)
+    struct FailureEntry {
+        char     timestamp[20]; // UTC
+        uint32_t duration_s;
+    };
+    std::vector<FailureEntry> failure_log;
 
     // Validatie
     bool  crc_valid;         // CRC16-check geslaagd
