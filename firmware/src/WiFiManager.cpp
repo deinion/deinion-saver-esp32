@@ -7,10 +7,11 @@ WiFiManager::WiFiManager()
 {}
 
 bool WiFiManager::begin() {
+    _retryCount = 0;  // Frisse start, ook na portal-timeout
     _loadCredentials();
 
     if (_ssid.isEmpty()) {
-        Serial.println("[WiFi] Geen opgeslagen netwerk — BLE provisioning nodig");
+        Serial.println("[WiFi] Geen opgeslagen netwerk — captive portal nodig");
         _state = WiFiState::FAILED;
         return false;
     }

@@ -55,16 +55,23 @@ void _updateInterval() {
     }
 }
 
-// ─── Schakelaar: debounced drukdetectie ──────────────────────────────────────
+// ─── Schakelaar: lange druk (≥3 sec) detectie ────────────────────────────────
+// Geeft true als de knop minimaal 3 seconden ingedrukt blijft.
+// Blokkeert maximaal 3 seconden; bij eerder loslaten direct false.
 
-bool setupBtnPressed() {
+bool setupBtnLongPress() {
     if (digitalRead(SETUP_BTN_PIN) != LOW) return false;
-    delay(50);  // debounce
-    return digitalRead(SETUP_BTN_PIN) == LOW;
+    unsigned long pressStart = millis();
+    while (digitalRead(SETUP_BTN_PIN) == LOW) {
+        if (millis() - pressStart >= 3000) return true;
+        delay(10);
+    }
+    return false;  // Te snel losgelaten
 }
 
 // ─── Telegram lezen ───────────────────────────────────────────────────────────
-// Controleert ook de schakelaar tijdens wachten, zodat een druk nooit gemist wordt
+// Controleert ook de schakelaar tijdens wachten, zodat een lange druk nooit
+// gemist wordt terwijl de P1-lus actief is.
 
 String readTelegram() {
     String telegram = "";
@@ -72,7 +79,7 @@ String readTelegram() {
     unsigned long timeout = millis() + 15000;
 
     while (millis() < timeout) {
-        if (setupBtnPressed()) return "";  // Schakelaar ingedrukt — breek af
+        if (setupBtnLongPress()) return "";  // Lange druk — breek af voor portal
 
         if (!P1Serial.available()) { delay(1); continue; }
 
@@ -94,11 +101,23 @@ String readTelegram() {
 }
 
 // ─── Captive portal starten ───────────────────────────────────────────────────
+// byButton=true → portal is handmatig gestart; 5-minuten timeout actief als
+//                 niemand verbindt en er een bekend netwerk aanwezig is.
+// byButton=false → automatisch gestart (geen WiFi beschikbaar); geen timeout.
 
-void startPortal() {
-    Serial.println("[Main] WiFi niet beschikbaar — captive portal starten");
+static bool     _portalByButton = false;
+static uint32_t _portalStartMs  = 0;
+
+void startPortal(bool byButton = false) {
+    _portalByButton = byButton;
+    _portalStartMs  = millis();
+
+    Serial.println(byButton
+        ? "[Main] Setup-knop: captive portal starten (5 min timeout als al WiFi bekend)"
+        : "[Main] WiFi niet beschikbaar — captive portal starten");
 
     portal.start([](const String& ssid, const String& password) {
+        _portalByButton = false;
         portal.stop();
         delay(200);
 
@@ -132,10 +151,10 @@ void setup() {
     failureLog.begin();   // LittleFS + storingenlog laden
     framBuffer.begin(FRAM_SDA_PIN, FRAM_SCL_PIN);  // FRAM ring buffer
 
-    // Schakelaar bij opstarten ingedrukt → direct portal starten
-    if (setupBtnPressed()) {
-        Serial.println("[Main] Setup-knop ingedrukt bij opstarten — portal direct starten");
-        startPortal();
+    // Schakelaar bij opstarten 3 sec ingedrukt → direct portal starten
+    if (setupBtnLongPress()) {
+        Serial.println("[Main] Setup-knop (lange druk) bij opstarten — portal direct starten");
+        startPortal(true);
         return;
     }
 
@@ -150,13 +169,29 @@ void loop() {
     // Portal actief: verwerk DNS + HTTP requests, skip P1
     if (portal.isRunning()) {
         portal.update();
+
+        // 5-minuten timeout: alleen als portal door knop gestart is,
+        // geen client verbonden, en er een bekend netwerk is om naar terug te keren
+        if (_portalByButton
+                && WiFi.softAPgetStationNum() == 0
+                && millis() - _portalStartMs >= 5UL * 60 * 1000) {
+            if (wifiManager.hasSavedCredentials()) {
+                Serial.println("[Main] 5 min verstreken zonder verbinding — portal stoppen, WiFi herverbinden");
+                _portalByButton = false;
+                portal.stop();
+                delay(200);
+                wifiManager.begin();
+            } else {
+                _portalStartMs = millis();  // Geen credentials: timer resetten, blijven wachten
+            }
+        }
         return;
     }
 
-    // Schakelaar ingedrukt → portal direct activeren
-    if (setupBtnPressed()) {
-        Serial.println("[Main] Setup-knop ingedrukt — captive portal activeren");
-        startPortal();
+    // Schakelaar 3 seconden ingedrukt → portal activeren
+    if (setupBtnLongPress()) {
+        Serial.println("[Main] Setup-knop (lange druk) — captive portal activeren");
+        startPortal(true);
         return;
     }
 

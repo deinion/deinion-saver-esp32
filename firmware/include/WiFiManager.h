@@ -38,11 +38,12 @@ public:
     // Verwijder opgeslagen credentials (factory reset)
     void clearCredentials();
 
-    bool        isConnected()  const { return _state == WiFiState::CONNECTED; }
-    bool        needsSetup()   const { return _state == WiFiState::FAILED; }
-    WiFiState   getState()     const { return _state; }
-    String      getSSID()      const { return _ssid; }
-    IPAddress   getIP()        const { return WiFi.localIP(); }
+    bool        isConnected()        const { return _state == WiFiState::CONNECTED; }
+    bool        needsSetup()         const { return _state == WiFiState::FAILED; }
+    bool        hasSavedCredentials() const { return !_ssid.isEmpty(); }
+    WiFiState   getState()           const { return _state; }
+    String      getSSID()            const { return _ssid; }
+    IPAddress   getIP()              const { return WiFi.localIP(); }
 
 private:
     bool        _connect();
