@@ -60,12 +60,27 @@ Pin 6: Power GND
 
 ## I²C Pinnen (FRAM)
 
-In `main.cpp` gedefinieerd als:
 ```cpp
-#define FRAM_SDA_PIN 8
-#define FRAM_SCL_PIN 9
+#define FRAM_SCL_PIN 47
+#define FRAM_SDA_PIN 48
 ```
-Pas aan als je PCB andere pinnen gebruikt.
+
+## Setup schakelaar
+
+- **Pin**: GPIO 9, geconfigureerd als `INPUT_PULLUP`
+- **Type**: puls-schakelaar (momentary)
+- **Functie**: indrukken activeert de captive portal (AP-modus voor WiFi-setup)
+- Werkt zowel bij **opstarten** (schakelaar ingedrukt houden) als tijdens **normale werking**
+- De bestaande WiFi-fallback logica blijft altijd actief naast de schakelaar
+
+## Maintenance LEDs
+
+| LED | Pin | Huidig gebruik |
+|-----|-----|----------------|
+| LED1 | GPIO 1 | Gereserveerd (toekomstige functie) |
+| LED2 | GPIO 2 | Gereserveerd (toekomstige functie) |
+
+Beide LEDs zijn als OUTPUT geïnitialiseerd en starten uit (LOW).
 
 ## Stroomverbruik (schatting)
 

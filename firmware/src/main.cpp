@@ -6,13 +6,21 @@
 #include "FRAMRingBuffer.h"
 
 // ─── Pin configuratie ──────────────────────────────────────────────────────────
-#define P1_RX_PIN    4
+#define P1_RX_PIN    8
 #define P1_RTS_PIN   5
 #define P1_BAUDRATE  115200
 
-// I²C voor FRAM (MB85RC64TAPNF) — aanpassen aan PCB-layout
-#define FRAM_SDA_PIN 8
-#define FRAM_SCL_PIN 9
+// Puls-schakelaar: indrukken activeert captive portal (AP-modus)
+// Toekomstige functies mogelijk — overige WiFi-fallback logica blijft ongewijzigd
+#define SETUP_BTN_PIN 9
+
+// I²C voor FRAM (MB85RC64TAPNF-G-BDERE1)
+#define FRAM_SCL_PIN 47
+#define FRAM_SDA_PIN 48
+
+// Maintenance-LEDs
+#define LED1_PIN 1
+#define LED2_PIN 2
 
 // ─── Globale objecten ──────────────────────────────────────────────────────────
 HardwareSerial  P1Serial(1);
@@ -47,7 +55,16 @@ void _updateInterval() {
     }
 }
 
+// ─── Schakelaar: debounced drukdetectie ──────────────────────────────────────
+
+bool setupBtnPressed() {
+    if (digitalRead(SETUP_BTN_PIN) != LOW) return false;
+    delay(50);  // debounce
+    return digitalRead(SETUP_BTN_PIN) == LOW;
+}
+
 // ─── Telegram lezen ───────────────────────────────────────────────────────────
+// Controleert ook de schakelaar tijdens wachten, zodat een druk nooit gemist wordt
 
 String readTelegram() {
     String telegram = "";
@@ -55,6 +72,8 @@ String readTelegram() {
     unsigned long timeout = millis() + 15000;
 
     while (millis() < timeout) {
+        if (setupBtnPressed()) return "";  // Schakelaar ingedrukt — breek af
+
         if (!P1Serial.available()) { delay(1); continue; }
 
         char c = (char)P1Serial.read();
@@ -104,8 +123,21 @@ void setup() {
     pinMode(P1_RTS_PIN, OUTPUT);
     digitalWrite(P1_RTS_PIN, HIGH);
 
+    pinMode(SETUP_BTN_PIN, INPUT_PULLUP);
+    pinMode(LED1_PIN, OUTPUT);
+    pinMode(LED2_PIN, OUTPUT);
+    digitalWrite(LED1_PIN, LOW);
+    digitalWrite(LED2_PIN, LOW);
+
     failureLog.begin();   // LittleFS + storingenlog laden
     framBuffer.begin(FRAM_SDA_PIN, FRAM_SCL_PIN);  // FRAM ring buffer
+
+    // Schakelaar bij opstarten ingedrukt → direct portal starten
+    if (setupBtnPressed()) {
+        Serial.println("[Main] Setup-knop ingedrukt bij opstarten — portal direct starten");
+        startPortal();
+        return;
+    }
 
     if (!wifiManager.begin()) {
         startPortal();
@@ -121,7 +153,14 @@ void loop() {
         return;
     }
 
-    // WiFi-toestand bijhouden
+    // Schakelaar ingedrukt → portal direct activeren
+    if (setupBtnPressed()) {
+        Serial.println("[Main] Setup-knop ingedrukt — captive portal activeren");
+        startPortal();
+        return;
+    }
+
+    // WiFi-toestand bijhouden (bestaande fallback — ongewijzigd)
     wifiManager.update();
     if (wifiManager.needsSetup() && !portal.isRunning()) {
         startPortal();

@@ -121,10 +121,13 @@ prefs.end();
 
 | Constante | Waarde | Bestand |
 |-----------|--------|---------|
-| P1 RX pin | GPIO 4 | main.cpp |
+| P1 RX pin | GPIO 8 | main.cpp |
 | P1 RTS pin | GPIO 5 | main.cpp |
-| FRAM SDA | GPIO 8 | main.cpp |
-| FRAM SCL | GPIO 9 | main.cpp |
+| Setup schakelaar | GPIO 9 | main.cpp |
+| FRAM SCL | GPIO 47 | main.cpp |
+| FRAM SDA | GPIO 48 | main.cpp |
+| LED1 (maintenance) | GPIO 1 | main.cpp |
+| LED2 (maintenance) | GPIO 2 | main.cpp |
 | FRAM I²C adres | 0x50 | FRAMRingBuffer.h |
 | FRAM capaciteit | 681 entries | FRAMRingBuffer.h |
 | FRAM magic | 0xDE1A | FRAMRingBuffer.h |
