@@ -67,8 +67,6 @@ public:
 private:
     // Hulpfuncties
     float  extractFloat(const String& text, const char* obisCode, const char* unit);
-    bool   extractTimestamp(const String& text, const char* obisPattern,
-                            char* outBuf, size_t bufLen);
     bool   validateCRC(const String& telegram);
     uint16_t crc16(const char* data, size_t len);
 

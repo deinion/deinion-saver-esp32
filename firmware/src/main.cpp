@@ -58,6 +58,9 @@ void _updateInterval() {
 // ─── Schakelaar: lange druk (≥3 sec) detectie ────────────────────────────────
 // Geeft true als de knop minimaal 3 seconden ingedrukt blijft.
 // Blokkeert maximaal 3 seconden; bij eerder loslaten direct false.
+// Let op: wordt zowel in loop() als in readTelegram() gecontroleerd. Als de
+// druk precies tijdens een telegram-leescyclus begint, kan 3+3 = 6 sec nodig zijn.
+// In de praktijk is dit niet merkbaar omdat de knop zelden precies dan ingedrukt wordt.
 
 bool setupBtnLongPress() {
     if (digitalRead(SETUP_BTN_PIN) != LOW) return false;
