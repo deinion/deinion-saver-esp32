@@ -23,8 +23,8 @@ public:
     bool isRunning() const { return _running; }
 
 private:
-    void _setupRoutes();
-    String _buildPage(const String& message = "");
+    void   _setupRoutes();
+    String _extractJson(const String& json, const String& key);
 
     WebServer   _server;
     DNSServer   _dns;
