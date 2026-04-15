@@ -3,11 +3,16 @@
 #include "WiFiManager.h"
 #include "CaptivePortal.h"
 #include "PowerFailureLog.h"
+#include "FRAMRingBuffer.h"
 
 // ─── Pin configuratie ──────────────────────────────────────────────────────────
 #define P1_RX_PIN    4
 #define P1_RTS_PIN   5
 #define P1_BAUDRATE  115200
+
+// I²C voor FRAM (MB85RC64TAPNF) — aanpassen aan PCB-layout
+#define FRAM_SDA_PIN 8
+#define FRAM_SCL_PIN 9
 
 // ─── Globale objecten ──────────────────────────────────────────────────────────
 HardwareSerial  P1Serial(1);
@@ -15,6 +20,32 @@ P1Parser        parser;
 WiFiManager     wifiManager;
 CaptivePortal   portal;
 PowerFailureLog failureLog;
+FRAMRingBuffer  framBuffer;
+
+// ─── Interval auto-detectie ───────────────────────────────────────────────────
+static uint32_t _lastTelegramMs = 0;
+static uint16_t _detectedInterval = 0;  // 0 = nog niet bepaald
+
+void _updateInterval() {
+    uint32_t now = millis();
+    if (_lastTelegramMs == 0) {
+        _lastTelegramMs = now;
+        return;
+    }
+    uint32_t delta = now - _lastTelegramMs;
+    _lastTelegramMs = now;
+
+    // Afronden naar dichtstbijzijnde seconde; negeer onbetrouwbare metingen
+    uint16_t sec = (uint16_t)((delta + 500) / 1000);
+    if (sec < 1 || sec > 60) return;
+
+    // Sla op als interval veranderd is
+    if (sec != _detectedInterval) {
+        _detectedInterval = sec;
+        framBuffer.setInterval(sec);
+        Serial.printf("[Main] Telegram interval gedetecteerd: %d seconde(n)\n", sec);
+    }
+}
 
 // ─── Telegram lezen ───────────────────────────────────────────────────────────
 
@@ -74,6 +105,7 @@ void setup() {
     digitalWrite(P1_RTS_PIN, HIGH);
 
     failureLog.begin();   // LittleFS + storingenlog laden
+    framBuffer.begin(FRAM_SDA_PIN, FRAM_SCL_PIN);  // FRAM ring buffer
 
     if (!wifiManager.begin()) {
         startPortal();
@@ -104,6 +136,16 @@ void loop() {
     if (!parser.parse(telegram, data)) {
         Serial.println("[P1] Telegram kon niet worden geparsed");
         return;
+    }
+
+    // FRAM ring buffer: sla huidig verbruik op + update interval
+    _updateInterval();
+    if (framBuffer.isReady()) {
+        FRAMEntry fe;
+        fe.unix_time    = 0;  // TODO: NTP-tijd invullen zodra beschikbaar
+        fe.power_usage  = data.current_power_usage;
+        fe.power_return = data.current_power_return;
+        framBuffer.push(fe);
     }
 
     // Stroomstoringen verwerken — direct naar flash als er nieuwe zijn
